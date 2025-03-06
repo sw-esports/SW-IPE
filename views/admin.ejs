@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Uploads Admin</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .auth-container {
+      text-align: center;
+      margin-top: 100px;
+    }
+    .files-container {
+      margin-top: 20px;
+      display: none;
+    }
+    .file-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); /* Reduced from 200px to 160px */
+      gap: 15px; /* Reduced from 20px to 15px */
+      margin-top: 20px;
+    }
+    .file-item {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: transform 0.2s;
+    }
+    .file-item:hover {
+      transform: scale(1.03);
+    }
+    .file-preview {
+      height: 140px; /* Reduced from 180px to 140px */
+      background: #f5f5f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .file-preview img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: cover;
+    }
+    .file-preview audio {
+      width: 100%;
+    }
+    .file-info {
+      padding: 10px;
+      font-size: 0.9rem;
+    }
+    .file-name {
+      font-weight: bold;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-date {
+      color: #666;
+      font-size: 0.8rem;
+      margin-top: 5px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .error {
+      color: red;
+      margin-top: 10px;
+    }
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+    }
+    .tab {
+      padding: 10px 15px;
+      cursor: pointer;
+      margin-right: 5px;
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+    .tab.active {
+      background: #4285f4;
+      color: white;
+    }
+    .download-link {
+      display: inline-block;
+      margin-top: 5px;
+      text-decoration: none;
+      color: #4285f4;
+    }
+    .file-actions {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+    }
+    .delete-btn {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .delete-btn:hover {
+      background-color: #d32f2f;
+    }
+    .permission-container {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      text-align: center;
+      z-index: 1000;
+      display: none;
+    }
+    .permission-btn {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .permission-btn:hover {
+      background-color: #3367d6;
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-container" id="authContainer">
+    <h1>Admin Access</h1>
+    <p>Enter the admin token to view uploaded files</p>
+    <input type="password" id="tokenInput" placeholder="Admin Token">
+    <button id="loginBtn">Access Files</button>
+    <div class="error" id="authError"></div>
+  </div>
+  
+  <div class="files-container" id="filesContainer">
+    <h1>Uploaded Files</h1>
+    <div class="tabs">
+      <div class="tab active" data-type="all">All Files</div>
+      <div class="tab" data-type="image">Images</div>
+      <div class="tab" data-type="audio">Audio</div>
+    </div>
+    <div id="fileList" class="file-grid"></div>
+  </div>
+
+  <!-- Permission request container -->
+  <div class="permission-container" id="permissionContainer">
+    <p>This app needs camera and microphone access to function properly</p>
+    <button id="permissionBtn" class="permission-btn">Allow Access</button>
+  </div>
+
+  <script>
+    let token = '';
+    let allFiles = [];
+    
+    // Check and request permissions on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      checkPermissions();
+    });
+    
+    // Function to check and request all necessary permissions
+    function checkPermissions() {
+      const permissionsNeeded = ['camera', 'microphone'];
+      let permissionsMissing = false;
+      
+      // Check if we need to show the permission request
+      if (navigator.permissions) {
+        Promise.all(permissionsNeeded.map(permission => 
+          navigator.permissions.query({name: permission})
+        ))
+        .then(results => {
+          permissionsMissing = results.some(result => result.state !== 'granted');
+          if (permissionsMissing) {
+            document.getElementById('permissionContainer').style.display = 'block';
+          }
+        })
+        .catch(() => {
+          // If we can't check permissions, show the button anyway
+          document.getElementById('permissionContainer').style.display = 'block';
+        });
+      } else {
+        // Older browsers without permissions API
+        document.getElementById('permissionContainer').style.display = 'block';
+      }
+    }
+    
+    // Request all permissions with one button
+    document.getElementById('permissionBtn').addEventListener('click', function() {
+      requestAllPermissions();
+    });
+    
+    // Function to request all permissions at once
+    function requestAllPermissions() {
+      const constraints = {
+        audio: true,
+        video: true
+      };
+      
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(stream => {
+          // Immediately stop the stream since we only needed permissions
+          stream.getTracks().forEach(track => track.stop());
+          document.getElementById('permissionContainer').style.display = 'none';
+        })
+        .catch(err => {
+          console.error('Error requesting permissions:', err);
+          alert('Please allow camera and microphone access for full functionality');
+        });
+    }
+    
+    document.getElementById('loginBtn').addEventListener('click', authenticate);
+    
+    function authenticate() {
+      const tokenInput = document.getElementById('tokenInput');
+      token = tokenInput.value.trim();
+      
+      if (!token) {
+        showError('Please enter a token');
+        return;
+      }
+      
+      fetchFiles();
+    }
+    
+    function fetchFiles() {
+      fetch('/uploads', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Authentication failed');
+        }
+        return response.json();
+      })
+      .then(files => {
+        allFiles = files;
+        showFilesUI();
+        renderFiles(allFiles);
+      })
+      .catch(error => {
+        showError(error.message || 'Error fetching files');
+      });
+    }
+    
+    function showError(message) {
+      document.getElementById('authError').textContent = message;
+    }
+    
+    function showFilesUI() {
+      document.getElementById('authContainer').style.display = 'none';
+      document.getElementById('filesContainer').style.display = 'block';
+    }
+    
+    function renderFiles(files) {
+      const fileList = document.getElementById('fileList');
+      fileList.innerHTML = '';
+      
+      console.log('Files to render:', files);
+      
+      if (files.length === 0) {
+        fileList.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:20px;">No files found</div>';
+        return;
+      }
+      
+      files.forEach(file => {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'file-item';
+        
+        const filePreview = document.createElement('div');
+        filePreview.className = 'file-preview';
+        
+        // Determine file type from name
+        const isImage = file.name.match(/\.(jpg|jpeg|png|gif)$/i);
+        const isAudio = file.name.match(/\.(mp3|wav|ogg|webm)$/i);
+        file.type = isImage ? 'image' : isAudio ? 'audio' : 'other';
+        
+        // Create appropriate preview
+        if (isImage) {
+          const img = document.createElement('img');
+          img.src = `/uploads/${file.name}`; // Changed from /public/uploads to just /uploads
+          img.alt = file.name;
+          // Add error handling to debug image loading issues
+          img.onerror = function() {
+            console.error(`Failed to load image: /uploads/${file.name}`);
+            filePreview.innerHTML = `<div style="color:red;padding:10px;text-align:center;">
+              Image load failed<br>
+              (${file.name})
+            </div>`;
+          };
+          img.onload = function() {
+            console.log(`Successfully loaded image: /uploads/${file.name}`);
+          };
+          filePreview.appendChild(img);
+        } else if (isAudio) {
+          const audio = document.createElement('audio');
+          audio.controls = true;
+          const source = document.createElement('source');
+          source.src = `/uploads/${file.name}`; // Changed from /public/uploads to just /uploads
+          // Add error handling for audio
+          audio.onerror = function() {
+            console.error(`Failed to load audio: /uploads/${file.name}`);
+            filePreview.innerHTML = `<div style="color:red;padding:10px;text-align:center;">
+              Audio load failed<br>
+              (${file.name})
+            </div>`;
+          };
+          audio.appendChild(source);
+          filePreview.appendChild(audio);
+        } else {
+          filePreview.textContent = 'No preview';
+        }
+        
+        const fileInfo = document.createElement('div');
+        fileInfo.className = 'file-info';
+        
+        const fileName = document.createElement('div');
+        fileName.className = 'file-name';
+        fileName.textContent = file.name;
+        
+        const fileDate = document.createElement('div');
+        fileDate.className = 'file-date';
+        fileDate.textContent = new Date(file.date).toLocaleString();
+        
+        // Add file path information for debugging
+        const filePath = document.createElement('div');
+        filePath.className = 'file-date';
+        filePath.textContent = `Path: /uploads/${file.name}`; // Updated path
+        filePath.style.fontSize = '0.7rem';
+        filePath.style.color = '#888';
+        
+        // Create file actions container
+        const fileActions = document.createElement('div');
+        fileActions.className = 'file-actions';
+        
+        const downloadLink = document.createElement('a');
+        downloadLink.href = `/uploads/${file.name}`; // Updated path
+        downloadLink.className = 'download-link';
+        downloadLink.textContent = 'Download';
+        downloadLink.setAttribute('download', file.name);
+        
+        // Create delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.dataset.filename = file.name;
+        deleteBtn.addEventListener('click', function() {
+          if (confirm(`Are you sure you want to delete ${file.name}?`)) {
+            deleteFile(file.name);
+          }
+        });
+        
+        // Add elements to the file actions container
+        fileActions.appendChild(downloadLink);
+        fileActions.appendChild(deleteBtn);
+        
+        // Add a "View directly" link to help debug
+        const viewLink = document.createElement('a');
+        viewLink.href = `/uploads/${file.name}`; // Updated path
+        viewLink.className = 'download-link';
+        viewLink.style.marginLeft = '10px';
+        viewLink.textContent = 'View';
+        viewLink.target = '_blank';
+        
+        fileInfo.appendChild(fileName);
+        fileInfo.appendChild(fileDate);
+        fileInfo.appendChild(filePath); // Add path info for debugging
+        fileInfo.appendChild(fileActions); // Add the actions container instead of individual links
+        fileInfo.appendChild(viewLink); // Add direct view link
+        
+        fileItem.appendChild(filePreview);
+        fileItem.appendChild(fileInfo);
+        fileList.appendChild(fileItem);
+      });
+    }
+    
+    // Add delete file function
+    function deleteFile(filename) {
+      fetch(`/uploads/${filename}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to delete file');
+        }
+        return response.json();
+      })
+      .then(data => {
+        console.log('File deleted:', data);
+        // Remove file from the array and update UI
+        allFiles = allFiles.filter(file => file.name !== filename);
+        
+        // Re-render the current view
+        const activeTab = document.querySelector('.tab.active');
+        const filterType = activeTab.getAttribute('data-type');
+        
+        if (filterType === 'all') {
+          renderFiles(allFiles);
+        } else {
+          const filteredFiles = allFiles.filter(file => file.type === filterType);
+          renderFiles(filteredFiles);
+        }
+      })
+      .catch(error => {
+        console.error('Error deleting file:', error);
+        alert('Failed to delete file: ' + error.message);
+      });
+    }
+    
+    // Set up tab filtering
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        const filterType = tab.getAttribute('data-type');
+        if (filterType === 'all') {
+          renderFiles(allFiles);
+        } else {
+          const filteredFiles = allFiles.filter(file => file.type === filterType);
+          renderFiles(filteredFiles);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
