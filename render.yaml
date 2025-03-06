@@ -14,7 +14,3 @@ services:
         value: production
       - key: PORT
         value: 10000
-    disk:
-      name: uploads
-      mountPath: /uploads
-      sizeGB: 1
