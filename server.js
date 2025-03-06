@@ -79,5 +79,6 @@ app.post("/track", (req, res) => {
   res.send("User data saved!");
 });
 
-// Start the server
-app.listen(3000, () => console.log("Server running on http://localhost:3000"));
+// Start the server using the PORT environment variable (for Render) or default to 3000
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
