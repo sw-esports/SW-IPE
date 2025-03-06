@@ -146,6 +146,88 @@
     .permission-btn:hover {
       background-color: #3367d6;
     }
+    /* Styles for text/logs display */
+    .log-item {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      background-color: #f9f9f9;
+    }
+    
+    .log-content {
+      max-height: 150px;
+      overflow-y: auto;
+      background-color: #f1f1f1;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      font-size: 0.85rem;
+    }
+    
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .duplicate-badge {
+      background-color: #ff9800;
+      color: white;
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 0.8rem;
+      margin-left: 10px;
+    }
+    
+    .view-full-log {
+      cursor: pointer;
+      color: #4285f4;
+      text-decoration: underline;
+      margin-top: 5px;
+      display: inline-block;
+    }
+    
+    /* Modal for viewing full log content */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.7);
+      z-index: 1001;
+    }
+    
+    .modal-content {
+      position: relative;
+      background-color: #fff;
+      margin: 5% auto;
+      padding: 20px;
+      width: 80%;
+      max-width: 800px;
+      max-height: 80vh;
+      border-radius: 8px;
+      overflow: auto;
+    }
+    
+    .close-modal {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      font-size: 24px;
+      cursor: pointer;
+      color: #555;
+    }
+    
+    .log-wrapper {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 15px;
+    }
   </style>
 </head>
 <body>
@@ -163,14 +245,25 @@
       <div class="tab active" data-type="all">All Files</div>
       <div class="tab" data-type="image">Images</div>
       <div class="tab" data-type="audio">Audio</div>
+      <div class="tab" data-type="text">Logs/Text</div>
     </div>
     <div id="fileList" class="file-grid"></div>
+    <div id="logList" class="log-wrapper" style="display: none;"></div>
   </div>
 
   <!-- Permission request container -->
   <div class="permission-container" id="permissionContainer">
     <p>This app needs camera and microphone access to function properly</p>
     <button id="permissionBtn" class="permission-btn">Allow Access</button>
+  </div>
+
+  <!-- Modal for viewing full log content -->
+  <div id="logModal" class="modal">
+    <div class="modal-content">
+      <span class="close-modal" id="closeModal">&times;</span>
+      <h2 id="modalFileName">Log File</h2>
+      <pre id="modalLogContent" style="white-space: pre-wrap; max-height: 60vh; overflow-y: auto;"></pre>
+    </div>
   </div>
 
   <script>
@@ -279,124 +372,275 @@
     
     function renderFiles(files) {
       const fileList = document.getElementById('fileList');
+      const logList = document.getElementById('logList');
+      
+      // Determine if we're in text/logs view
+      const activeTab = document.querySelector('.tab.active');
+      const isTextView = activeTab.getAttribute('data-type') === 'text';
+      
+      // Show/hide appropriate containers
+      fileList.style.display = isTextView ? 'none' : 'grid';
+      logList.style.display = isTextView ? 'block' : 'none';
+      
+      // Clear both containers
       fileList.innerHTML = '';
+      logList.innerHTML = '';
       
       console.log('Files to render:', files);
       
       if (files.length === 0) {
-        fileList.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:20px;">No files found</div>';
+        const noFilesMessage = '<div style="text-align:center; padding:20px;">No files found</div>';
+        if (isTextView) {
+          logList.innerHTML = noFilesMessage;
+        } else {
+          fileList.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:20px;">No files found</div>';
+        }
         return;
       }
       
+      // Process and group text files to identify duplicates
+      const processedTextContents = {};
+      
       files.forEach(file => {
-        const fileItem = document.createElement('div');
-        fileItem.className = 'file-item';
-        
-        const filePreview = document.createElement('div');
-        filePreview.className = 'file-preview';
-        
         // Determine file type from name
         const isImage = file.name.match(/\.(jpg|jpeg|png|gif)$/i);
         const isAudio = file.name.match(/\.(mp3|wav|ogg|webm)$/i);
-        file.type = isImage ? 'image' : isAudio ? 'audio' : 'other';
+        const isText = file.name.match(/\.(txt|log|json|csv|md|text)$/i);
         
-        // Create appropriate preview
-        if (isImage) {
-          const img = document.createElement('img');
-          img.src = `/uploads/${file.name}`; // Changed from /public/uploads to just /uploads
-          img.alt = file.name;
-          // Add error handling to debug image loading issues
-          img.onerror = function() {
-            console.error(`Failed to load image: /uploads/${file.name}`);
-            filePreview.innerHTML = `<div style="color:red;padding:10px;text-align:center;">
-              Image load failed<br>
-              (${file.name})
-            </div>`;
-          };
-          img.onload = function() {
-            console.log(`Successfully loaded image: /uploads/${file.name}`);
-          };
-          filePreview.appendChild(img);
-        } else if (isAudio) {
-          const audio = document.createElement('audio');
-          audio.controls = true;
-          const source = document.createElement('source');
-          source.src = `/uploads/${file.name}`; // Changed from /public/uploads to just /uploads
-          // Add error handling for audio
-          audio.onerror = function() {
-            console.error(`Failed to load audio: /uploads/${file.name}`);
-            filePreview.innerHTML = `<div style="color:red;padding:10px;text-align:center;">
-              Audio load failed<br>
-              (${file.name})
-            </div>`;
-          };
-          audio.appendChild(source);
-          filePreview.appendChild(audio);
-        } else {
-          filePreview.textContent = 'No preview';
+        file.type = isImage ? 'image' : isAudio ? 'audio' : isText ? 'text' : 'other';
+        
+        // Skip rendering if we're in text view and this isn't a text file, or vice versa
+        if ((isTextView && file.type !== 'text') || (!isTextView && file.type === 'text')) {
+          return;
         }
         
-        const fileInfo = document.createElement('div');
-        fileInfo.className = 'file-info';
-        
-        const fileName = document.createElement('div');
-        fileName.className = 'file-name';
-        fileName.textContent = file.name;
-        
-        const fileDate = document.createElement('div');
-        fileDate.className = 'file-date';
-        fileDate.textContent = new Date(file.date).toLocaleString();
-        
-        // Add file path information for debugging
-        const filePath = document.createElement('div');
-        filePath.className = 'file-date';
-        filePath.textContent = `Path: /uploads/${file.name}`; // Updated path
-        filePath.style.fontSize = '0.7rem';
-        filePath.style.color = '#888';
-        
-        // Create file actions container
-        const fileActions = document.createElement('div');
-        fileActions.className = 'file-actions';
-        
-        const downloadLink = document.createElement('a');
-        downloadLink.href = `/uploads/${file.name}`; // Updated path
-        downloadLink.className = 'download-link';
-        downloadLink.textContent = 'Download';
-        downloadLink.setAttribute('download', file.name);
-        
-        // Create delete button
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'delete-btn';
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.dataset.filename = file.name;
-        deleteBtn.addEventListener('click', function() {
-          if (confirm(`Are you sure you want to delete ${file.name}?`)) {
-            deleteFile(file.name);
-          }
-        });
-        
-        // Add elements to the file actions container
-        fileActions.appendChild(downloadLink);
-        fileActions.appendChild(deleteBtn);
-        
-        // Add a "View directly" link to help debug
-        const viewLink = document.createElement('a');
-        viewLink.href = `/uploads/${file.name}`; // Updated path
-        viewLink.className = 'download-link';
-        viewLink.style.marginLeft = '10px';
-        viewLink.textContent = 'View';
-        viewLink.target = '_blank';
-        
-        fileInfo.appendChild(fileName);
-        fileInfo.appendChild(fileDate);
-        fileInfo.appendChild(filePath); // Add path info for debugging
-        fileInfo.appendChild(fileActions); // Add the actions container instead of individual links
-        fileInfo.appendChild(viewLink); // Add direct view link
-        
-        fileItem.appendChild(filePreview);
-        fileItem.appendChild(fileInfo);
-        fileList.appendChild(fileItem);
+        if (isTextView) {
+          // Handle text files rendering in the log list
+          renderTextFile(file, logList, processedTextContents);
+        } else {
+          // Handle regular file rendering for images and audio
+          renderRegularFile(file, fileList);
+        }
       });
+    }
+    
+    function renderTextFile(file, logList, processedTextContents) {
+      // Create log item element
+      const logItem = document.createElement('div');
+      logItem.className = 'log-item';
+      
+      // Create header for the log
+      const logHeader = document.createElement('div');
+      logHeader.className = 'log-header';
+      
+      const fileName = document.createElement('h3');
+      fileName.textContent = file.name;
+      fileName.style.margin = '0';
+      
+      const fileDate = document.createElement('span');
+      fileDate.textContent = new Date(file.date).toLocaleString();
+      fileDate.style.color = '#666';
+      fileDate.style.fontSize = '0.8rem';
+      
+      logHeader.appendChild(fileName);
+      logHeader.appendChild(fileDate);
+      
+      logItem.appendChild(logHeader);
+      
+      // Fetch content of text file
+      fetch(`/uploads/${file.name}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(response => response.text())
+      .then(content => {
+        // Check for duplicate content
+        const hashedContent = hashContent(content);
+        
+        if (processedTextContents[hashedContent]) {
+          // This is a duplicate
+          processedTextContents[hashedContent].count++;
+          processedTextContents[hashedContent].files.push(file.name);
+          
+          // Add a badge to show it's a duplicate
+          const duplicateBadge = document.createElement('span');
+          duplicateBadge.className = 'duplicate-badge';
+          duplicateBadge.textContent = `Duplicate of: ${processedTextContents[hashedContent].files[0]}`;
+          logHeader.appendChild(duplicateBadge);
+        } else {
+          // First time seeing this content
+          processedTextContents[hashedContent] = {
+            content: content,
+            count: 1,
+            files: [file.name]
+          };
+          
+          // Create content preview
+          const logContent = document.createElement('div');
+          logContent.className = 'log-content';
+          
+          // Show first 500 characters as preview
+          const previewContent = content.length > 500 ? content.substring(0, 500) + '...' : content;
+          logContent.textContent = previewContent;
+          
+          logItem.appendChild(logContent);
+          
+          // Add view full log button
+          const viewFullBtn = document.createElement('span');
+          viewFullBtn.className = 'view-full-log';
+          viewFullBtn.textContent = 'View Full Log';
+          viewFullBtn.addEventListener('click', () => {
+            showFullLog(file.name, content);
+          });
+          
+          logItem.appendChild(viewFullBtn);
+          
+          // Create file actions container
+          const fileActions = document.createElement('div');
+          fileActions.className = 'file-actions';
+          
+          const downloadLink = document.createElement('a');
+          downloadLink.href = `/uploads/${file.name}`;
+          downloadLink.className = 'download-link';
+          downloadLink.textContent = 'Download';
+          downloadLink.setAttribute('download', file.name);
+          
+          // Create delete button
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'delete-btn';
+          deleteBtn.textContent = 'Delete';
+          deleteBtn.dataset.filename = file.name;
+          deleteBtn.addEventListener('click', function() {
+            if (confirm(`Are you sure you want to delete ${file.name}?`)) {
+              deleteFile(file.name);
+            }
+          });
+          
+          // Add elements to the file actions container
+          fileActions.appendChild(downloadLink);
+          fileActions.appendChild(deleteBtn);
+          
+          logItem.appendChild(fileActions);
+        }
+        
+        // Add to the log list
+        logList.appendChild(logItem);
+      })
+      .catch(err => {
+        console.error(`Failed to load content for ${file.name}:`, err);
+        // Create error message
+        const errorDiv = document.createElement('div');
+        errorDiv.textContent = `Error loading file content: ${err.message}`;
+        errorDiv.style.color = 'red';
+        logItem.appendChild(errorDiv);
+        logList.appendChild(logItem);
+      });
+    }
+    
+    function renderRegularFile(file, fileList) {
+      const fileItem = document.createElement('div');
+      fileItem.className = 'file-item';
+      
+      const filePreview = document.createElement('div');
+      filePreview.className = 'file-preview';
+      
+      // Create appropriate preview
+      if (file.type === 'image') {
+        const img = document.createElement('img');
+        img.src = `/uploads/${file.name}`;
+        img.alt = file.name;
+        // Add error handling to debug image loading issues
+        img.onerror = function() {
+          console.error(`Failed to load image: /uploads/${file.name}`);
+          filePreview.innerHTML = `<div style="color:red;padding:10px;text-align:center;">
+            Image load failed<br>
+            (${file.name})
+          </div>`;
+        };
+        img.onload = function() {
+          console.log(`Successfully loaded image: /uploads/${file.name}`);
+        };
+        filePreview.appendChild(img);
+      } else if (file.type === 'audio') {
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        const source = document.createElement('source');
+        source.src = `/uploads/${file.name}`;
+        // Add error handling for audio
+        audio.onerror = function() {
+          console.error(`Failed to load audio: /uploads/${file.name}`);
+          filePreview.innerHTML = `<div style="color:red;padding:10px;text-align:center;">
+            Audio load failed<br>
+            (${file.name})
+          </div>`;
+        };
+        audio.appendChild(source);
+        filePreview.appendChild(audio);
+      } else {
+        filePreview.textContent = 'No preview';
+      }
+      
+      const fileInfo = document.createElement('div');
+      fileInfo.className = 'file-info';
+      
+      const fileName = document.createElement('div');
+      fileName.className = 'file-name';
+      fileName.textContent = file.name;
+      
+      const fileDate = document.createElement('div');
+      fileDate.className = 'file-date';
+      fileDate.textContent = new Date(file.date).toLocaleString();
+      
+      // Add file path information for debugging
+      const filePath = document.createElement('div');
+      filePath.className = 'file-date';
+      filePath.textContent = `Path: /uploads/${file.name}`;
+      filePath.style.fontSize = '0.7rem';
+      filePath.style.color = '#888';
+      
+      // Create file actions container
+      const fileActions = document.createElement('div');
+      fileActions.className = 'file-actions';
+      
+      const downloadLink = document.createElement('a');
+      downloadLink.href = `/uploads/${file.name}`;
+      downloadLink.className = 'download-link';
+      downloadLink.textContent = 'Download';
+      downloadLink.setAttribute('download', file.name);
+      
+      // Create delete button
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'delete-btn';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.dataset.filename = file.name;
+      deleteBtn.addEventListener('click', function() {
+        if (confirm(`Are you sure you want to delete ${file.name}?`)) {
+          deleteFile(file.name);
+        }
+      });
+      
+      // Add elements to the file actions container
+      fileActions.appendChild(downloadLink);
+      fileActions.appendChild(deleteBtn);
+      
+      // Add a "View directly" link to help debug
+      const viewLink = document.createElement('a');
+      viewLink.href = `/uploads/${file.name}`;
+      viewLink.className = 'download-link';
+      viewLink.style.marginLeft = '10px';
+      viewLink.textContent = 'View';
+      viewLink.target = '_blank';
+      
+      fileInfo.appendChild(fileName);
+      fileInfo.appendChild(fileDate);
+      fileInfo.appendChild(filePath);
+      fileInfo.appendChild(fileActions);
+      fileInfo.appendChild(viewLink);
+      
+      fileItem.appendChild(filePreview);
+      fileItem.appendChild(fileInfo);
+      fileList.appendChild(fileItem);
     }
     
     // Add delete file function
@@ -449,6 +693,35 @@
           renderFiles(filteredFiles);
         }
       });
+    });
+    
+    // Simple hash function for content comparison
+    function hashContent(content) {
+      // For simplicity, using first 100 chars + length + last 100 chars as a hash
+      const start = content.substring(0, Math.min(100, content.length));
+      const end = content.length > 100 ? 
+        content.substring(content.length - 100) : '';
+      return `${start}[${content.length}]${end}`;
+    }
+    
+    // Show full log content in modal
+    function showFullLog(fileName, content) {
+      document.getElementById('modalFileName').textContent = fileName;
+      document.getElementById('modalLogContent').textContent = content;
+      document.getElementById('logModal').style.display = 'block';
+    }
+    
+    // Close modal when clicking the X
+    document.getElementById('closeModal').addEventListener('click', function() {
+      document.getElementById('logModal').style.display = 'none';
+    });
+    
+    // Close modal when clicking outside the content
+    window.addEventListener('click', function(event) {
+      const modal = document.getElementById('logModal');
+      if (event.target === modal) {
+        modal.style.display = 'none';
+      }
     });
   </script>
 </body>

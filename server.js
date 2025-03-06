@@ -93,7 +93,7 @@ const protectRoute = (req, res, next) => {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     // Use a strong, randomly generated token in production
-    if (token === 'swipe-admin-token') {
+    if (token === 'sharagaki@07') {
       return next();
     }
   }
